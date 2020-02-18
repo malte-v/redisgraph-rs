@@ -4,7 +4,7 @@
 
 This crate parses responses from RedisGraph and converts them into ordinary Rust values.
 It exposes a very flexible API that allows you to retrieve a single value, a single record
-or multiple records using only one function: [`Graph::query`](graph/struct.Graph.html#method.query).
+or multiple records using only one function: [`Graph::query`](https://docs.rs/redisgraph/0.1.0/redisgraph/graph/struct.Graph.html#method.query).
 
 If you want to use this crate, add this to your Cargo.toml:
 
