@@ -2,6 +2,13 @@
 name = "redisgraph"
 version = "0.1.0"
 authors = ["Malte Voos <voos.malte@gmail.com>"]
+keywords = ["redis", "database", "graph-database"]
+description = "A Rust client for RedisGraph."
+homepage = "https://github.com/malte-v/redisgraph-rs"
+repository = "https://github.com/malte-v/redisgraph-rs"
+documentation = "https://docs.rs/redisgraph"
+license = "MIT"
+readme = "README.md"
 edition = "2018"
 
 [dependencies]
