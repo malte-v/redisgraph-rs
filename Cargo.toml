@@ -1,0 +1,15 @@
+[package]
+name = "redisgraph"
+version = "0.1.0"
+authors = ["Malte Voos <voos.malte@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+redis = "0.15.1"
+num = "0.2.1"
+num-derive = "0.3.0"
+num-traits = "0.2.11"
+
+[dev-dependencies]
+serial_test = "0.4.0"
+maplit = "1.0.2"
