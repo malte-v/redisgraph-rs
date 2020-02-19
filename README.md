@@ -1,3 +1,5 @@
+[![githubactions](https://github.com/malte-v/redisgraph-rs/workflows/elixir/badge.svg)](https://github.com/malte-v/redisgraph-rs/actions)
+
 # redisgraph-rs
 
 `redisgraph-rs` is an idiomatic Rust client for RedisGraph, the graph database by Redis.
