@@ -1,4 +1,6 @@
 [![githubactions](https://github.com/malte-v/redisgraph-rs/workflows/Rust/badge.svg)](https://github.com/malte-v/redisgraph-rs/actions)
+[![Latest Version](https://img.shields.io/crates/v/redisgraph.svg)](https://crates.io/crates/redisgraph)
+[![documentation](https://docs.rs/redisgraph/badge.svg)](https://docs.rs/redisgraph)
 
 # redisgraph-rs
 
