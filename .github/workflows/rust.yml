@@ -13,7 +13,7 @@ jobs:
     
     services:
       redisgraph:
-        image: redislabs/redisgraph:latest
+        image: redislabs/redisgraph:edge
         ports:
           - 6379:6379
 
