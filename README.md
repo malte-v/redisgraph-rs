@@ -1,4 +1,4 @@
-[![githubactions](https://github.com/malte-v/redisgraph-rs/workflows/elixir/badge.svg)](https://github.com/malte-v/redisgraph-rs/actions)
+[![githubactions](https://github.com/malte-v/redisgraph-rs/workflows/Rust/badge.svg)](https://github.com/malte-v/redisgraph-rs/actions)
 
 # redisgraph-rs
 
