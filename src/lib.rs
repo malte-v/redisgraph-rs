@@ -29,7 +29,7 @@
 //! First, run RedisGraph on your machine using
 //! 
 //! ```bash
-//! docker run --name redisgraph-test -d --rm -p 6379:6379 redislabs/redisgraph
+//! $ docker run --name redisgraph-test -d --rm -p 6379:6379 redislabs/redisgraph
 //! ```
 //! 
 //! Then, try out this code:
