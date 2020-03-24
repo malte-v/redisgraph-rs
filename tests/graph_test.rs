@@ -8,8 +8,8 @@ use common::*;
 #[test]
 #[serial]
 fn test_open_delete() {
-    let mut conn = get_connection();
+    let conn = get_connection();
 
-    let graph = Graph::open(&mut conn, "test_open_delete_graph").unwrap();
+    let graph = Graph::open(conn, "test_open_delete_graph".to_string()).unwrap();
     graph.delete().unwrap();
 }

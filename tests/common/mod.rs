@@ -7,8 +7,8 @@ pub fn get_connection() -> Connection {
 }
 
 pub fn with_graph<F: FnOnce(&mut Graph) -> ()>(action: F) {
-    let mut conn = get_connection();
-    let mut graph = Graph::open(&mut conn, "test_graph").unwrap();
+    let conn = get_connection();
+    let mut graph = Graph::open(conn, "test_graph".to_string()).unwrap();
 
     action(&mut graph);
 

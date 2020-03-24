@@ -28,7 +28,7 @@
 //! 
 //! First, run RedisGraph on your machine using
 //! 
-//! ```
+//! ```sh
 //! $ docker run --name redisgraph-test -d --rm -p 6379:6379 redislabs/redisgraph
 //! ```
 //! 
@@ -42,7 +42,7 @@
 //!     let client = Client::open("redis://127.0.0.1")?;
 //!     let mut connection = client.get_connection()?;
 //! 
-//!     let mut graph = Graph::open(&mut connection, "MotoGP")?;
+//!     let mut graph = Graph::open(connection, "MotoGP".to_string())?;
 //! 
 //!     // Create six nodes (three riders, three teams) and three relationships between them.
 //!     graph.mutate("CREATE (:Rider {name: 'Valentino Rossi', birth_year: 1979})-[:rides]->(:Team {name: 'Yamaha'}), \

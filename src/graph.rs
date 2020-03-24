@@ -7,20 +7,20 @@ use crate::{
 };
 
 /// Represents a single graph in the database.
-pub struct Graph<'c, 'n> {
-    conn: &'c mut Connection,
-    name: &'n str,
+pub struct Graph {
+    conn: Connection,
+    name: String,
 
     labels: Vec<RedisString>,
     relationship_types: Vec<RedisString>,
     property_keys: Vec<RedisString>,
 }
 
-impl<'c, 'n> Graph<'c, 'n> {
+impl Graph {
     /// Opens the graph with the given name from the database.
     ///
     /// If the graph does not already exist, creates a new graph with the given name.
-    pub fn open(conn: &'c mut Connection, name: &'n str) -> RedisGraphResult<Self> {
+    pub fn open(conn: Connection, name: String) -> RedisGraphResult<Self> {
         let mut graph = Self {
             conn,
             name,
@@ -74,10 +74,10 @@ impl<'c, 'n> Graph<'c, 'n> {
     /// Deletes the entire graph from the database.
     ///
     /// *This action is not easily reversible.*
-    pub fn delete(self) -> RedisGraphResult<()> {
+    pub fn delete(mut self) -> RedisGraphResult<()> {
         redis::cmd("GRAPH.DELETE")
             .arg(self.name())
-            .query::<()>(self.conn)
+            .query::<()>(&mut self.conn)
             .map_err(RedisGraphError::from)
     }
 
@@ -136,7 +136,7 @@ impl<'c, 'n> Graph<'c, 'n> {
             .arg(self.name())
             .arg(query)
             .arg("--compact")
-            .query(self.conn)
+            .query(&mut self.conn)
             .map_err(RedisGraphError::from)
     }
 
