@@ -19,6 +19,12 @@ pub trait FromCell: Sized {
     ) -> RedisGraphResult<Self>;
 }
 
+impl FromTable for ResultSet {
+    fn from_table(result_set: &ResultSet) -> RedisGraphResult<Self> {
+        Ok(result_set.clone())
+    }
+}
+
 impl<T: FromRow> FromTable for Vec<T> {
     fn from_table(result_set: &ResultSet) -> RedisGraphResult<Self> {
         let num_rows = result_set.num_rows();
