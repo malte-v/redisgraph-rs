@@ -1,6 +1,6 @@
 [package]
 name = "redisgraph"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Malte Voos <voos.malte@gmail.com>"]
 keywords = ["redis", "database", "graph-database"]
 description = "A Rust client for RedisGraph."
