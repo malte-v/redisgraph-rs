@@ -2,7 +2,7 @@ mod common;
 
 use maplit::hashmap;
 use redisgraph::{
-    result_set::{Node, Path, Relation, Scalar},
+    result_set::{Node, Path, Edge, Scalar},
     RedisString,
 };
 use serial_test::serial;
@@ -130,15 +130,15 @@ fn test_nodes() {
 
 #[test]
 #[serial]
-fn test_relation() {
+fn test_edge() {
     with_graph(|graph| {
         graph
             .mutate("CREATE (src)-[rel:RelationType { prop: 42 }]->(dst)")
             .unwrap();
-        let relation: Relation = graph.query("MATCH (src)-[rel]->(dst) RETURN rel").unwrap();
+        let relation: Edge = graph.query("MATCH (src)-[rel]->(dst) RETURN rel").unwrap();
         assert_eq!(
             relation,
-            Relation {
+            Edge {
                 type_name: "RelationType".to_string().into(),
                 properties: hashmap! {
                     "prop".to_string().into() => Scalar::Integer(42),
@@ -182,13 +182,13 @@ fn test_path() {
                     },
                 ],
                 edges: vec![
-                    Relation {
+                    Edge {
                         type_name: "R1".to_string().into(),
                         properties: hashmap! {
                             "prop".to_string().into() => Scalar::Integer(2),
                         },
                     },
-                    Relation {
+                    Edge {
                         type_name: "R2".to_string().into(),
                         properties: hashmap! {
                             "prop".to_string().into() => Scalar::Integer(4),

@@ -1,7 +1,7 @@
 use crate::{
     assignments::FromCell,
     client_type_error,
-    result_set::{Node, Path, Relation, Scalar},
+    result_set::{Node, Path, Edge, Scalar},
     RedisGraphError, RedisGraphResult, RedisString, ResultSet,
 };
 
@@ -157,14 +157,14 @@ impl FromCell for Node {
     }
 }
 
-impl FromCell for Relation {
+impl FromCell for Edge {
     fn from_cell(
         result_set: &ResultSet,
         row_idx: usize,
         column_idx: usize,
     ) -> RedisGraphResult<Self> {
-        let relation = result_set.get_relation(row_idx, column_idx)?;
-        Ok(relation.clone())
+        let edge = result_set.get_edge(row_idx, column_idx)?;
+        Ok(edge.clone())
     }
 }
 
