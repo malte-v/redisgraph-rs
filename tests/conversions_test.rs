@@ -1,8 +1,11 @@
 mod common;
 
-use redisgraph::{RedisString, result_set::{Node, Relation, Scalar}};
-use serial_test::serial;
 use maplit::hashmap;
+use redisgraph::{
+    result_set::{Node, Path, Relation, Scalar},
+    RedisString,
+};
+use serial_test::serial;
 
 use common::*;
 
@@ -86,12 +89,42 @@ fn test_node() {
     with_graph(|graph| {
         graph.mutate("CREATE (n:NodeLabel { prop: 42 })").unwrap();
         let node: Node = graph.query("MATCH (n) RETURN n").unwrap();
-        assert_eq!(node, Node {
-            labels: vec!["NodeLabel".to_string().into()],
-            properties: hashmap! {
-                "prop".to_string().into() => Scalar::Integer(42),
-            },
-        });
+        assert_eq!(
+            node,
+            Node {
+                labels: vec!["NodeLabel".to_string().into()],
+                properties: hashmap! {
+                    "prop".to_string().into() => Scalar::Integer(42),
+                },
+            }
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_nodes() {
+    with_graph(|graph| {
+        graph.mutate("CREATE (n:NodeLabel { prop: 42 })").unwrap();
+        graph.mutate("CREATE (n:NodeLabel { prop: 84 })").unwrap();
+        let nodes: Vec<Node> = graph.query("MATCH (n) RETURN n").unwrap();
+        assert_eq!(
+            nodes,
+            vec![
+                Node {
+                    labels: vec!["NodeLabel".to_string().into()],
+                    properties: hashmap! {
+                        "prop".to_string().into() => Scalar::Integer(42),
+                    },
+                },
+                Node {
+                    labels: vec!["NodeLabel".to_string().into()],
+                    properties: hashmap! {
+                        "prop".to_string().into() => Scalar::Integer(84),
+                    },
+                }
+            ]
+        );
     });
 }
 
@@ -99,13 +132,56 @@ fn test_node() {
 #[serial]
 fn test_relation() {
     with_graph(|graph| {
-        graph.mutate("CREATE (src)-[rel:RelationType { prop: 42 }]->(dst)").unwrap();
+        graph
+            .mutate("CREATE (src)-[rel:RelationType { prop: 42 }]->(dst)")
+            .unwrap();
         let relation: Relation = graph.query("MATCH (src)-[rel]->(dst) RETURN rel").unwrap();
-        assert_eq!(relation, Relation {
-            type_name: "RelationType".to_string().into(),
-            properties: hashmap! {
-                "prop".to_string().into() => Scalar::Integer(42),
-            },
-        });
+        assert_eq!(
+            relation,
+            Relation {
+                type_name: "RelationType".to_string().into(),
+                properties: hashmap! {
+                    "prop".to_string().into() => Scalar::Integer(42),
+                },
+            }
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_path() {
+    with_graph(|graph| {
+        graph
+            .mutate("CREATE (:L1 {prop: 42})-[:REL {prop: 44}]->(:L2 {prop: 43})")
+            .unwrap();
+        let path: Path = graph
+            .query("MATCH p = (:L1)-[:REL]->(:L2) RETURN p")
+            .unwrap();
+        assert_eq!(
+            path,
+            Path {
+                nodes: vec![
+                    Node {
+                        labels: vec!["L1".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(42),
+                        },
+                    },
+                    Node {
+                        labels: vec!["L2".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(43),
+                        },
+                    },
+                ],
+                edges: vec![Relation {
+                    type_name: "REL".to_string().into(),
+                    properties: hashmap! {
+                        "prop".to_string().into() => Scalar::Integer(44),
+                    },
+                }]
+            }
+        );
     });
 }
