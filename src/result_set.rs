@@ -346,7 +346,6 @@ fn parse_statistics(value: Value) -> RedisGraphResult<Statistics> {
 
 /// A scalar value returned by RedisGraph.
 #[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
 pub enum Scalar {
     Nil,
     Boolean(bool),

@@ -153,10 +153,10 @@ fn test_relation() {
 fn test_path() {
     with_graph(|graph| {
         graph
-            .mutate("CREATE (:L1 {prop: 42})-[:REL {prop: 44}]->(:L2 {prop: 43})")
+            .mutate("CREATE (:L1 {prop: 1})-[:R1 {prop: 2}]->(:L2 {prop: 3})-[:R2 {prop: 4}]->(:L3 {prop: 5})")
             .unwrap();
         let path: Path = graph
-            .query("MATCH p = (:L1)-[:REL]->(:L2) RETURN p")
+            .query("MATCH p = (:L1)-[:R1]->(:L2)-[:R2]->(:L3) RETURN p")
             .unwrap();
         assert_eq!(
             path,
@@ -165,22 +165,36 @@ fn test_path() {
                     Node {
                         labels: vec!["L1".to_string().into()],
                         properties: hashmap! {
-                            "prop".to_string().into() => Scalar::Integer(42),
+                            "prop".to_string().into() => Scalar::Integer(1),
                         },
                     },
                     Node {
                         labels: vec!["L2".to_string().into()],
                         properties: hashmap! {
-                            "prop".to_string().into() => Scalar::Integer(43),
+                            "prop".to_string().into() => Scalar::Integer(3),
+                        },
+                    },
+                    Node {
+                        labels: vec!["L3".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(5),
                         },
                     },
                 ],
-                edges: vec![Relation {
-                    type_name: "REL".to_string().into(),
-                    properties: hashmap! {
-                        "prop".to_string().into() => Scalar::Integer(44),
+                edges: vec![
+                    Relation {
+                        type_name: "R1".to_string().into(),
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(2),
+                        },
                     },
-                }]
+                    Relation {
+                        type_name: "R2".to_string().into(),
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(4),
+                        },
+                    }
+                ]
             }
         );
     });
