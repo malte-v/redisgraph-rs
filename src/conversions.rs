@@ -1,8 +1,8 @@
 use crate::{
     assignments::FromCell,
     client_type_error,
-    result_set::{Node, Path, Edge, Scalar},
-    RedisGraphError, RedisGraphResult, RedisString, ResultSet,
+    RedisGraphError,
+    RedisGraphResult, RedisString, result_set::{Edge, Node, Path, RawPath, Scalar}, ResultSet,
 };
 
 impl FromCell for Scalar {
@@ -168,7 +168,7 @@ impl FromCell for Edge {
     }
 }
 
-impl FromCell for Path {
+impl FromCell for RawPath {
     fn from_cell(
         result_set: &ResultSet,
         row_idx: usize,
@@ -176,5 +176,16 @@ impl FromCell for Path {
     ) -> RedisGraphResult<Self> {
         let path = result_set.get_path(row_idx, column_idx)?;
         Ok(path.clone())
+    }
+}
+
+impl FromCell for Path {
+    fn from_cell(
+        result_set: &ResultSet,
+        row_idx: usize,
+        column_idx: usize,
+    ) -> RedisGraphResult<Self> {
+        let path = result_set.get_path(row_idx, column_idx)?;
+        Ok(path.clone().into())
     }
 }

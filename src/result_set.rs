@@ -146,7 +146,7 @@ impl ResultSet {
     ///
     /// Returns an error if the value at the given position is not a path
     /// or if the position is out of bounds.
-    pub fn get_path(&self, row_idx: usize, column_idx: usize) -> RedisGraphResult<&Path> {
+    pub fn get_path(&self, row_idx: usize, column_idx: usize) -> RedisGraphResult<&RawPath> {
         match self.columns.get(column_idx) {
             Some(column) => match column {
                 Column::Scalars(cells) => match cells.get(row_idx) {
@@ -355,7 +355,7 @@ pub enum Scalar {
     Array(Vec<Scalar>),
     Edge(Edge),
     Node(Node),
-    Path(Path),
+    Path(RawPath),
 }
 
 /// Implemented for Redis types with a nil-like variant.
@@ -470,7 +470,7 @@ impl FromRedisValueWithGraph for Scalar {
                                 Ok(edge) => Ok(Scalar::Edge(edge)),
                                 Err(e) => Err(e),
                             },
-                            Some(ScalarType::Path) => match Path::from_redis_value_with_graph(scalar_value, graph) {
+                            Some(ScalarType::Path) => match RawPath::from_redis_value_with_graph(scalar_value, graph) {
                                 Ok(path) => Ok(Scalar::Path(path)),
                                 Err(e) => Err(e),
                             },
@@ -576,16 +576,109 @@ impl FromRedisValueWithGraph for Edge {
     }
 }
 
-/// A path returned by RedisGraph.
+/// A raw path structure returned by RedisGraph.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Path {
+pub struct RawPath {
     /// Nodes in the path.
     pub nodes: Vec<Node>,
     /// Edges in the path.
     pub edges: Vec<Edge>,
 }
 
-impl FromRedisValueWithGraph for Path {
+impl RawPath {
+    /// The length of the path. This is effectively the amount of [`Edge`]s in
+    /// the path.
+    pub fn len(&self) -> usize {
+        self.edges.len()
+    }
+
+    /// Returns `true` if this path is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl From<RawPath> for Path {
+    fn from(path: RawPath) -> Self {
+        let len = path.len();
+        let mut nodes: Vec<Option<Node>> = path.nodes.into_iter().map(Some).collect();
+        let mut edges: Vec<Option<Edge>> = path.edges.into_iter().map(Some).collect();
+        let mut segment = Path::End(nodes[len - 1].take().unwrap(), edges[len - 1].take().unwrap(), nodes[len].take().unwrap());
+        for i in (len - 2)..=0 {
+            segment = Path::Cons(nodes[i].take().unwrap(), edges[i].take().unwrap(), Box::new(segment));
+        }
+        segment
+    }
+}
+
+/// A recursive structure to traverse over a path.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Path {
+    Cons(Node, Edge, Box<Path>),
+    End(Node, Edge, Node),
+}
+
+impl Path {
+    /// Creates an iterator over all segments of the path.
+    fn iter(&self) -> PathTraversal {
+        PathTraversal { current: Some(self) }
+    }
+
+    /// The length of the path. This is effectively the amount of [`Edge`]s, or segments,
+    /// in the path.
+    pub fn len(&self) -> usize {
+        self.iter().count()
+    }
+
+    /// Returns `true` if this path is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// An iterator that recursively traverses a [`Path`].
+pub struct PathTraversal<'a> {
+    current: Option<&'a Path>,
+}
+
+impl<'a> Iterator for PathTraversal<'a> {
+    type Item = &'a Path;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(current) = self.current {
+            self.current = match current {
+                Path::Cons(_, _, next) => Some(&next),
+                _ => None,
+            };
+            Some(current)
+        } else {
+            None
+        }
+    }
+}
+
+impl From<Path> for RawPath {
+    fn from(path: Path) -> Self {
+        let mut nodes: Vec<Node> = Vec::new();
+        let mut edges: Vec<Edge> = Vec::new();
+
+        path.iter().for_each(|p| match p {
+            Path::Cons(node, edge, _) => {
+                nodes.push(node.clone());
+                edges.push(edge.clone());
+            },
+            Path::End(start, edge, end) => {
+                nodes.push(start.clone());
+                nodes.push(end.clone());
+                edges.push(edge.clone());
+            }
+        });
+
+        RawPath { nodes, edges }
+    }
+}
+
+impl FromRedisValueWithGraph for RawPath {
     fn from_redis_value_with_graph(value: Value, graph: &Graph) -> RedisGraphResult<Self> {
         match value {
             Value::Bulk(mut values) => {

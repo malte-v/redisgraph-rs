@@ -8,7 +8,7 @@ pub fn get_connection() -> Connection {
 }
 
 #[allow(dead_code)]
-pub fn with_graph<F: FnOnce(&mut Graph) -> ()>(action: F) {
+pub fn with_graph<F: FnOnce(&mut Graph)>(action: F) {
     let conn = get_connection();
     let mut graph = Graph::open(conn, "test_graph".to_string()).unwrap();
 
