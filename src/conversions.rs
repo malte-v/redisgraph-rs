@@ -4,6 +4,7 @@ use crate::{
     RedisGraphError,
     RedisGraphResult, RedisString, result_set::{Edge, Node, Path, RawPath, Scalar}, ResultSet,
 };
+use std::convert::TryInto;
 
 impl FromCell for Scalar {
     fn from_cell(
@@ -186,6 +187,6 @@ impl FromCell for Path {
         column_idx: usize,
     ) -> RedisGraphResult<Self> {
         let path = result_set.get_path(row_idx, column_idx)?;
-        Ok(path.clone().into())
+        path.clone().try_into()
     }
 }

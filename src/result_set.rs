@@ -6,6 +6,7 @@ use num::FromPrimitive;
 use redis::{FromRedisValue, Value};
 
 use crate::{server_type_error, Graph, RedisGraphError, RedisGraphResult};
+use std::convert::TryFrom;
 
 /// Implemented by types that can be contructed from a
 /// Redis [`Value`](https://docs.rs/redis/0.15.1/redis/enum.Value.html) and a [`Graph`](../graph/struct.Graph.html)
@@ -598,8 +599,17 @@ impl RawPath {
     }
 }
 
-impl From<RawPath> for Path {
-    fn from(path: RawPath) -> Self {
+impl TryFrom<RawPath> for Path {
+    type Error = RedisGraphError;
+
+    fn try_from(path: RawPath) -> Result<Self, Self::Error> {
+        if path.edges.is_empty() {
+            return server_type_error!("failed to convert RawPath to Path: no segments to traverse");
+        }
+        if path.nodes.len() != path.edges.len() + 1 {
+            return server_type_error!("failed to convert RawPath to Path: expected {} nodes, got {}", path.edges.len() + 1, path.nodes.len());
+        }
+
         let len = path.len();
         let mut nodes: Vec<Option<Node>> = path.nodes.into_iter().map(Some).collect();
         let mut edges: Vec<Option<Edge>> = path.edges.into_iter().map(Some).collect();
@@ -607,7 +617,7 @@ impl From<RawPath> for Path {
         for i in (len - 2)..=0 {
             segment = Path::Cons(nodes[i].take().unwrap(), edges[i].take().unwrap(), Box::new(segment));
         }
-        segment
+        Ok(segment)
     }
 }
 
