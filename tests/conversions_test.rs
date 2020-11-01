@@ -1,10 +1,13 @@
-mod common;
-
-use redisgraph::{RedisString, result_set::{Node, Relation, Scalar}};
-use serial_test::serial;
 use maplit::hashmap;
+use serial_test::serial;
 
 use common::*;
+use redisgraph::{
+    result_set::{Edge, Node, Path, RawPath, Scalar},
+    RedisString,
+};
+
+mod common;
 
 #[test]
 #[serial]
@@ -86,26 +89,168 @@ fn test_node() {
     with_graph(|graph| {
         graph.mutate("CREATE (n:NodeLabel { prop: 42 })").unwrap();
         let node: Node = graph.query("MATCH (n) RETURN n").unwrap();
-        assert_eq!(node, Node {
-            labels: vec!["NodeLabel".to_string().into()],
-            properties: hashmap! {
-                "prop".to_string().into() => Scalar::Integer(42),
-            },
-        });
+        assert_eq!(
+            node,
+            Node {
+                labels: vec!["NodeLabel".to_string().into()],
+                properties: hashmap! {
+                    "prop".to_string().into() => Scalar::Integer(42),
+                },
+            }
+        );
     });
 }
 
 #[test]
 #[serial]
-fn test_relation() {
+fn test_nodes() {
     with_graph(|graph| {
-        graph.mutate("CREATE (src)-[rel:RelationType { prop: 42 }]->(dst)").unwrap();
-        let relation: Relation = graph.query("MATCH (src)-[rel]->(dst) RETURN rel").unwrap();
-        assert_eq!(relation, Relation {
-            type_name: "RelationType".to_string().into(),
-            properties: hashmap! {
-                "prop".to_string().into() => Scalar::Integer(42),
-            },
-        });
+        graph.mutate("CREATE (n:NodeLabel { prop: 42 })").unwrap();
+        graph.mutate("CREATE (n:NodeLabel { prop: 84 })").unwrap();
+        let nodes: Vec<Node> = graph.query("MATCH (n) RETURN n").unwrap();
+        assert_eq!(
+            nodes,
+            vec![
+                Node {
+                    labels: vec!["NodeLabel".to_string().into()],
+                    properties: hashmap! {
+                        "prop".to_string().into() => Scalar::Integer(42),
+                    },
+                },
+                Node {
+                    labels: vec!["NodeLabel".to_string().into()],
+                    properties: hashmap! {
+                        "prop".to_string().into() => Scalar::Integer(84),
+                    },
+                }
+            ]
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_edge() {
+    with_graph(|graph| {
+        graph
+            .mutate("CREATE (src)-[rel:RelationType { prop: 42 }]->(dst)")
+            .unwrap();
+        let relation: Edge = graph.query("MATCH (src)-[rel]->(dst) RETURN rel").unwrap();
+        assert_eq!(
+            relation,
+            Edge {
+                type_name: "RelationType".to_string().into(),
+                properties: hashmap! {
+                    "prop".to_string().into() => Scalar::Integer(42),
+                },
+            }
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_path() {
+    with_graph(|graph| {
+        graph
+            .mutate("CREATE (:L1 {prop: 1})-[:R1 {prop: 2}]->(:L2 {prop: 3})-[:R2 {prop: 4}]->(:L3 {prop: 5})")
+            .unwrap();
+        let path: Path = graph
+            .query("MATCH p = (:L1)-[:R1]->(:L2)-[:R2]->(:L3) RETURN p")
+            .unwrap();
+        assert_eq!(path.len(), 2);
+        let path: RawPath = path.into();
+        assert_eq!(
+            path,
+            RawPath {
+                nodes: vec![
+                    Node {
+                        labels: vec!["L1".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(1),
+                        },
+                    },
+                    Node {
+                        labels: vec!["L2".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(3),
+                        },
+                    },
+                    Node {
+                        labels: vec!["L3".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(5),
+                        },
+                    },
+                ],
+                edges: vec![
+                    Edge {
+                        type_name: "R1".to_string().into(),
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(2),
+                        },
+                    },
+                    Edge {
+                        type_name: "R2".to_string().into(),
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(4),
+                        },
+                    }
+                ]
+            }
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_raw_path() {
+    with_graph(|graph| {
+        graph
+            .mutate("CREATE (:L1 {prop: 1})-[:R1 {prop: 2}]->(:L2 {prop: 3})-[:R2 {prop: 4}]->(:L3 {prop: 5})")
+            .unwrap();
+        let path: RawPath = graph
+            .query("MATCH p = (:L1)-[:R1]->(:L2)-[:R2]->(:L3) RETURN p")
+            .unwrap();
+        assert_eq!(path.len(), 2);
+        assert_eq!(
+            path,
+            RawPath {
+                nodes: vec![
+                    Node {
+                        labels: vec!["L1".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(1),
+                        },
+                    },
+                    Node {
+                        labels: vec!["L2".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(3),
+                        },
+                    },
+                    Node {
+                        labels: vec!["L3".to_string().into()],
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(5),
+                        },
+                    },
+                ],
+                edges: vec![
+                    Edge {
+                        type_name: "R1".to_string().into(),
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(2),
+                        },
+                    },
+                    Edge {
+                        type_name: "R2".to_string().into(),
+                        properties: hashmap! {
+                            "prop".to_string().into() => Scalar::Integer(4),
+                        },
+                    }
+                ]
+            }
+        );
     });
 }

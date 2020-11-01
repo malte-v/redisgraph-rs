@@ -1,9 +1,10 @@
 use crate::{
     assignments::FromCell,
     client_type_error,
-    result_set::{Node, Relation, Scalar},
+    result_set::{Edge, Node, Path, RawPath, Scalar},
     RedisGraphError, RedisGraphResult, RedisString, ResultSet,
 };
+use std::convert::TryInto;
 
 impl FromCell for Scalar {
     fn from_cell(
@@ -157,13 +158,35 @@ impl FromCell for Node {
     }
 }
 
-impl FromCell for Relation {
+impl FromCell for Edge {
     fn from_cell(
         result_set: &ResultSet,
         row_idx: usize,
         column_idx: usize,
     ) -> RedisGraphResult<Self> {
-        let relation = result_set.get_relation(row_idx, column_idx)?;
-        Ok(relation.clone())
+        let edge = result_set.get_edge(row_idx, column_idx)?;
+        Ok(edge.clone())
+    }
+}
+
+impl FromCell for RawPath {
+    fn from_cell(
+        result_set: &ResultSet,
+        row_idx: usize,
+        column_idx: usize,
+    ) -> RedisGraphResult<Self> {
+        let path = result_set.get_path(row_idx, column_idx)?;
+        Ok(path.clone())
+    }
+}
+
+impl FromCell for Path {
+    fn from_cell(
+        result_set: &ResultSet,
+        row_idx: usize,
+        column_idx: usize,
+    ) -> RedisGraphResult<Self> {
+        let path = result_set.get_path(row_idx, column_idx)?;
+        path.clone().try_into()
     }
 }

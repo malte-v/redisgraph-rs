@@ -6,6 +6,7 @@ use num::FromPrimitive;
 use redis::{FromRedisValue, Value};
 
 use crate::{server_type_error, Graph, RedisGraphError, RedisGraphResult};
+use std::convert::TryFrom;
 
 /// Implemented by types that can be contructed from a
 /// Redis [`Value`](https://docs.rs/redis/0.15.1/redis/enum.Value.html) and a [`Graph`](../graph/struct.Graph.html)
@@ -23,7 +24,7 @@ impl<T: FromRedisValue> FromRedisValueWithGraph for T {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResultSet {
     /// The columns of this result set.
-    ///     
+    ///
     /// Empty if the response did not contain any return values.
     pub columns: Vec<Column>,
     /// Contains statistics messages from the response.
@@ -85,6 +86,17 @@ impl ResultSet {
                         "failed to get node: row index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
                     ),
                 },
+                Column::Scalars(cells) => match cells.get(row_idx) {
+                    Some(cell) => match cell {
+                        Scalar::Node(node) => Ok(node),
+                            _ => client_type_error!(
+                            "failed to get node: tried to get node in scalar column, but was actually {:?}", cell,
+                        ),
+                    },
+                    None => client_type_error!(
+                        "failed to get node: row index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
+                    ),
+                },
                 any => client_type_error!(
                     "failed to get node: expected column of nodes, found {:?}",
                     any
@@ -96,26 +108,66 @@ impl ResultSet {
         }
     }
 
-    /// Returns the relation at the given position.
+    /// Returns the edge at the given position.
     ///
-    /// Returns an error if the value at the given position is not a relation
+    /// Returns an error if the value at the given position is not an edge
     /// or if the position is out of bounds.
-    pub fn get_relation(&self, row_idx: usize, column_idx: usize) -> RedisGraphResult<&Relation> {
+    pub fn get_edge(&self, row_idx: usize, column_idx: usize) -> RedisGraphResult<&Edge> {
         match self.columns.get(column_idx) {
             Some(column) => match column {
                 Column::Relations(cells) => match cells.get(row_idx) {
                     Some(cell) => Ok(cell),
                     None => client_type_error!(
-                        "failed to get relation: row index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
+                        "failed to get edge: row index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
+                    ),
+                },
+                Column::Scalars(cells) => match cells.get(row_idx) {
+                    Some(cell) => match cell {
+                        Scalar::Edge(edge) => Ok(edge),
+                        _ => client_type_error!(
+                            "failed to get edge: tried to get edge in scalar column, but was actually {:?}", cell,
+                        ),
+                    },
+                    None => client_type_error!(
+                        "failed to get edge: row index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
                     ),
                 },
                 any => client_type_error!(
-                    "failed to get relation: expected column of relations, found {:?}",
+                    "failed to get edge: expected column of relations or scalars, found {:?}",
                     any
                 ),
-            }
+            },
             None => client_type_error!(
-                "failed to get relation: column index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
+                "failed to get edge: column index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
+            ),
+        }
+    }
+
+    /// Returns the path at the given position.
+    ///
+    /// Returns an error if the value at the given position is not a path
+    /// or if the position is out of bounds.
+    pub fn get_path(&self, row_idx: usize, column_idx: usize) -> RedisGraphResult<&RawPath> {
+        match self.columns.get(column_idx) {
+            Some(column) => match column {
+                Column::Scalars(cells) => match cells.get(row_idx) {
+                    Some(cell) => match cell {
+                        Scalar::Path(path) => Ok(path),
+                        _ => client_type_error!(
+                            "failed to get path: tried to get path in scalar column, but was actually {:?}", cell,
+                        ),
+                    },
+                    None => client_type_error!(
+                        "failed to get path: row index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
+                    ),
+                },
+                any => client_type_error!(
+                    "failed to get path: expected column of scalars, found {:?}",
+                    any
+                ),
+            },
+            None => client_type_error!(
+                "failed to get path: column index out of bounds: the len is {:?} but the index is {:?}", self.columns.len(), column_idx,
             ),
         }
     }
@@ -126,7 +178,7 @@ impl ResultSet {
 pub enum Column {
     Scalars(Vec<Scalar>),
     Nodes(Vec<Node>),
-    Relations(Vec<Relation>),
+    Relations(Vec<Edge>),
 }
 
 impl Column {
@@ -220,10 +272,10 @@ impl FromRedisValueWithGraph for ResultSet {
                                                     result_table
                                                         .iter_mut()
                                                         .map(|row| {
-                                                            Relation::from_redis_value_with_graph(row[i].take(), graph)
+                                                            Edge::from_redis_value_with_graph(row[i].take(), graph)
                                                                 .map_err(RedisGraphError::from)
                                                         })
-                                                        .collect::<RedisGraphResult<Vec<Relation>>>()?,
+                                                        .collect::<RedisGraphResult<Vec<Edge>>>()?,
                                                 )),
                                                 None => server_type_error!("expected integer between 0 and 3 as column type")
                                             }?;
@@ -301,6 +353,10 @@ pub enum Scalar {
     Integer(i64),
     Double(f64),
     String(RedisString),
+    Array(Vec<Scalar>),
+    Edge(Edge),
+    Node(Node),
+    Path(RawPath),
 }
 
 /// Implemented for Redis types with a nil-like variant.
@@ -351,10 +407,14 @@ enum ScalarType {
     Integer = 3,
     Boolean = 4,
     Double = 5,
+    Array = 6,
+    Edge = 7,
+    Node = 8,
+    Path = 9,
 }
 
 impl FromRedisValueWithGraph for Scalar {
-    fn from_redis_value_with_graph(value: Value, _graph: &Graph) -> RedisGraphResult<Self> {
+    fn from_redis_value_with_graph(value: Value, graph: &Graph) -> RedisGraphResult<Self> {
         match value {
             Value::Bulk(mut values) => {
                 if values.len() == 2 {
@@ -388,9 +448,34 @@ impl FromRedisValueWithGraph for Scalar {
                                     },
                                     Err(_) => Err(RedisGraphError::InvalidUtf8),
                                 }
-                                _ => server_type_error!("expected string representating a double as scalar value (scalar type is double)")
-                            }
-                            None => server_type_error!("expected integer between 0 and 5 (scalar type) as first element of scalar array")
+                                _ => server_type_error!("expected string representing a double as scalar value (scalar type is double)")
+                            },
+                            Some(ScalarType::Array) => match scalar_value {
+                                Value::Bulk(elements) => {
+                                    let mut values = Vec::new();
+                                    for elem in elements {
+                                        match Self::from_redis_value_with_graph(elem, graph) {
+                                            Ok(val) => values.push(val),
+                                            Err(e) => return Err(e),
+                                        }
+                                    }
+                                    Ok(Scalar::Array(values))
+                                },
+                                _ => server_type_error!("expected something for array")
+                            },
+                            Some(ScalarType::Node) => match Node::from_redis_value_with_graph(scalar_value, graph) {
+                                Ok(node) => Ok(Scalar::Node(node)),
+                                Err(e) => Err(e),
+                            },
+                            Some(ScalarType::Edge) => match Edge::from_redis_value_with_graph(scalar_value, graph) {
+                                Ok(edge) => Ok(Scalar::Edge(edge)),
+                                Err(e) => Err(e),
+                            },
+                            Some(ScalarType::Path) => match RawPath::from_redis_value_with_graph(scalar_value, graph) {
+                                Ok(path) => Ok(Scalar::Path(path)),
+                                Err(e) => Err(e),
+                            },
+                            None => server_type_error!("expected integer between 0 and 9 (scalar type) as first element of scalar array, got {}", scalar_type_int)
                         },
                         _ => server_type_error!("expected integer representing scalar type as first element of scalar array")
                     }
@@ -451,16 +536,16 @@ impl FromRedisValueWithGraph for Node {
     }
 }
 
-/// A relation returned by RedisGraph.
+/// An edge returned by RedisGraph.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Relation {
-    /// The type name of this relation. 
+pub struct Edge {
+    /// The type name of this edge.
     pub type_name: RedisString,
-    /// The properties of this relation.
+    /// The properties of this edge.
     pub properties: HashMap<RedisString, Scalar>,
 }
 
-impl FromRedisValueWithGraph for Relation {
+impl FromRedisValueWithGraph for Edge {
     fn from_redis_value_with_graph(value: Value, graph: &Graph) -> RedisGraphResult<Self> {
         match value {
             Value::Bulk(mut values) => {
@@ -484,10 +569,206 @@ impl FromRedisValueWithGraph for Relation {
                         properties,
                     })
                 } else {
-                    server_type_error!("expected array of size 5 as relationship representation",)
+                    server_type_error!("expected array of size 5 as edge representation",)
                 }
             }
-            _ => server_type_error!("expected array as relationship representation"),
+            _ => server_type_error!("expected array as edge representation"),
+        }
+    }
+}
+
+/// A raw path structure returned by RedisGraph.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawPath {
+    /// Nodes in the path.
+    pub nodes: Vec<Node>,
+    /// Edges in the path.
+    pub edges: Vec<Edge>,
+}
+
+#[allow(clippy::len_without_is_empty)]
+impl RawPath {
+    /// The length of the path. This is effectively the amount of [`Edge`]s in
+    /// the path.
+    pub fn len(&self) -> usize {
+        self.edges.len()
+    }
+}
+
+impl From<Path> for RawPath {
+    fn from(path: Path) -> Self {
+        let mut nodes: Vec<Node> = Vec::new();
+        let mut edges: Vec<Edge> = Vec::new();
+
+        path.bifor_owned(|node| nodes.push(node), |edge| edges.push(edge));
+
+        RawPath { nodes, edges }
+    }
+}
+
+/// A list-like representation of a path.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Path {
+    Cons(Node, Edge, Box<Path>),
+    End(Node, Edge, Node),
+}
+
+#[allow(clippy::len_without_is_empty)]
+impl Path {
+    /// Fold over edges and nodes.
+    ///
+    /// Fold order is as follows:
+    /// - 1st node
+    /// - 1st edge
+    /// - 2nd node
+    /// - ...
+    /// - (n-1)th node
+    /// - (n-1)th edge
+    /// - nth node
+    pub fn bifoldl<A, FN, FE>(&self, mut fn_node: FN, mut fn_edge: FE, initial: A) -> A
+    where
+        FN: FnMut(A, &Node) -> A,
+        FE: FnMut(A, &Edge) -> A,
+    {
+        match self {
+            Path::Cons(start, edge, rest) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                rest.bifoldl(fn_node, fn_edge, res_edge)
+            }
+            Path::End(start, edge, end) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                fn_node(res_edge, end)
+            }
+        }
+    }
+
+    /// Fold over edges and nodes, consuming the path.
+    ///
+    /// Fold order is as follows:
+    /// - 1st node
+    /// - 1st edge
+    /// - 2nd node
+    /// - ...
+    /// - (n-1)th node
+    /// - (n-1)th edge
+    /// - nth node
+    pub fn bifoldl_owned<A, FN, FE>(self, mut fn_node: FN, mut fn_edge: FE, initial: A) -> A
+    where
+        FN: FnMut(A, Node) -> A,
+        FE: FnMut(A, Edge) -> A,
+    {
+        match self {
+            Path::Cons(start, edge, rest) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                rest.bifoldl_owned(fn_node, fn_edge, res_edge)
+            }
+            Path::End(start, edge, end) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                fn_node(res_edge, end)
+            }
+        }
+    }
+
+    /// [`bifoldl`] without the accumulator.
+    pub fn bifor<FN, FE>(&self, mut fn_node: FN, mut fn_edge: FE)
+    where
+        FN: FnMut(&Node),
+        FE: FnMut(&Edge),
+    {
+        self.bifoldl(|(), node| fn_node(node), |(), edge| fn_edge(edge), ())
+    }
+
+    /// [`bifoldl_owned`] without the accumulator.
+    pub fn bifor_owned<FN, FE>(self, mut fn_node: FN, mut fn_edge: FE)
+    where
+        FN: FnMut(Node),
+        FE: FnMut(Edge),
+    {
+        self.bifoldl_owned(|(), node| fn_node(node), |(), edge| fn_edge(edge), ())
+    }
+
+    /// The length of the path. This is effectively the amount of [`Edge`]s, or segments,
+    /// in the path.
+    ///
+    /// NOTE: runs in O(n)
+    pub fn len(&self) -> usize {
+        self.bifoldl(|acc, _| acc, |acc, _| acc + 1, 0)
+    }
+}
+
+impl TryFrom<RawPath> for Path {
+    type Error = RedisGraphError;
+
+    fn try_from(mut path: RawPath) -> Result<Self, Self::Error> {
+        let last_node = path.nodes.pop()
+            .filter(|_| path.nodes.len() == path.edges.len())
+            .ok_or_else(|| RedisGraphError::ServerTypeError("failed to convert RawPath to Path: there must be one more node than there are edges".to_string()))?;
+        let last_edge = path.edges.pop()
+            .ok_or_else(|| RedisGraphError::ServerTypeError("failed to convert RawPath to Path: there must be at least one edge".to_string()))?;
+        let second_to_last_node = path.nodes.pop()
+            .ok_or_else(|| RedisGraphError::ClientTypeError("BUG in redisgraph-rs: while converting RawPath to Path".to_string()))?;
+
+        let mut segment = Path::End(second_to_last_node, last_edge, last_node);
+        for (node, edge) in path.nodes.into_iter().zip(path.edges.into_iter()).rev() {
+            segment = Path::Cons(node, edge, Box::new(segment));
+        }
+
+        Ok(segment)
+    }
+}
+
+impl FromRedisValueWithGraph for RawPath {
+    fn from_redis_value_with_graph(value: Value, graph: &Graph) -> RedisGraphResult<Self> {
+        match value {
+            Value::Bulk(mut values) => {
+                if values.len() == 2 {
+                    let nodes = values[0].take();
+                    let edges = values[1].take();
+
+                    let nodes = match Scalar::from_redis_value_with_graph(nodes, graph)? {
+                        Scalar::Array(nodes) => nodes
+                            .into_iter()
+                            .map(|scalar| match scalar {
+                                Scalar::Node(node) => Ok(node),
+                                other => server_type_error!(
+                                    "unexpected non-node in path nodes array, {:?}",
+                                    other
+                                ),
+                            })
+                            .collect::<RedisGraphResult<Vec<Node>>>(),
+                        other => server_type_error!(
+                            "expected path nodes to be an array, not {:?}",
+                            other
+                        ),
+                    }?;
+
+                    let edges = match Scalar::from_redis_value_with_graph(edges, graph)? {
+                        Scalar::Array(edges) => edges
+                            .into_iter()
+                            .map(|scalar| match scalar {
+                                Scalar::Edge(edge) => Ok(edge),
+                                other => server_type_error!(
+                                    "unexpected non-edge in path edges array, {:?}",
+                                    other
+                                ),
+                            })
+                            .collect::<RedisGraphResult<Vec<Edge>>>(),
+                        other => server_type_error!(
+                            "expected path nodes to be an array, not {:?}",
+                            other
+                        ),
+                    }?;
+
+                    Ok(Self { nodes, edges })
+                } else {
+                    server_type_error!("expected array of size 2 as path representation")
+                }
+            }
+            _ => server_type_error!("expected array as path representation"),
         }
     }
 }
