@@ -586,84 +586,12 @@ pub struct RawPath {
     pub edges: Vec<Edge>,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl RawPath {
     /// The length of the path. This is effectively the amount of [`Edge`]s in
     /// the path.
     pub fn len(&self) -> usize {
         self.edges.len()
-    }
-
-    /// Returns `true` if this path is empty.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
-impl TryFrom<RawPath> for Path {
-    type Error = RedisGraphError;
-
-    fn try_from(path: RawPath) -> Result<Self, Self::Error> {
-        if path.edges.is_empty() {
-            return server_type_error!("failed to convert RawPath to Path: no segments to traverse");
-        }
-        if path.nodes.len() != path.edges.len() + 1 {
-            return server_type_error!("failed to convert RawPath to Path: expected {} nodes, got {}", path.edges.len() + 1, path.nodes.len());
-        }
-
-        let len = path.len();
-        let mut nodes: Vec<Option<Node>> = path.nodes.into_iter().map(Some).collect();
-        let mut edges: Vec<Option<Edge>> = path.edges.into_iter().map(Some).collect();
-        let mut segment = Path::End(nodes[len - 1].take().unwrap(), edges[len - 1].take().unwrap(), nodes[len].take().unwrap());
-        for i in (len - 2)..=0 {
-            segment = Path::Cons(nodes[i].take().unwrap(), edges[i].take().unwrap(), Box::new(segment));
-        }
-        Ok(segment)
-    }
-}
-
-/// A recursive structure to traverse over a path.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Path {
-    Cons(Node, Edge, Box<Path>),
-    End(Node, Edge, Node),
-}
-
-impl Path {
-    /// Creates an iterator over all segments of the path.
-    fn iter(&self) -> PathTraversal {
-        PathTraversal { current: Some(self) }
-    }
-
-    /// The length of the path. This is effectively the amount of [`Edge`]s, or segments,
-    /// in the path.
-    pub fn len(&self) -> usize {
-        self.iter().count()
-    }
-
-    /// Returns `true` if this path is empty.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
-/// An iterator that recursively traverses a [`Path`].
-pub struct PathTraversal<'a> {
-    current: Option<&'a Path>,
-}
-
-impl<'a> Iterator for PathTraversal<'a> {
-    type Item = &'a Path;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(current) = self.current {
-            self.current = match current {
-                Path::Cons(_, _, next) => Some(&next),
-                _ => None,
-            };
-            Some(current)
-        } else {
-            None
-        }
     }
 }
 
@@ -672,19 +600,124 @@ impl From<Path> for RawPath {
         let mut nodes: Vec<Node> = Vec::new();
         let mut edges: Vec<Edge> = Vec::new();
 
-        path.iter().for_each(|p| match p {
-            Path::Cons(node, edge, _) => {
-                nodes.push(node.clone());
-                edges.push(edge.clone());
-            },
-            Path::End(start, edge, end) => {
-                nodes.push(start.clone());
-                nodes.push(end.clone());
-                edges.push(edge.clone());
-            }
-        });
+        path.bifor_owned(|node| nodes.push(node), |edge| edges.push(edge));
 
         RawPath { nodes, edges }
+    }
+}
+
+/// A list-like representation of a path.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Path {
+    Cons(Node, Edge, Box<Path>),
+    End(Node, Edge, Node),
+}
+
+#[allow(clippy::len_without_is_empty)]
+impl Path {
+    /// Fold over edges and nodes.
+    ///
+    /// Fold order is as follows:
+    /// - 1st node
+    /// - 1st edge
+    /// - 2nd node
+    /// - ...
+    /// - (n-1)th node
+    /// - (n-1)th edge
+    /// - nth node
+    pub fn bifoldl<A, FN, FE>(&self, mut fn_node: FN, mut fn_edge: FE, initial: A) -> A
+    where
+        FN: FnMut(A, &Node) -> A,
+        FE: FnMut(A, &Edge) -> A,
+    {
+        match self {
+            Path::Cons(start, edge, rest) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                rest.bifoldl(fn_node, fn_edge, res_edge)
+            }
+            Path::End(start, edge, end) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                fn_node(res_edge, end)
+            }
+        }
+    }
+
+    /// Fold over edges and nodes, consuming the path.
+    ///
+    /// Fold order is as follows:
+    /// - 1st node
+    /// - 1st edge
+    /// - 2nd node
+    /// - ...
+    /// - (n-1)th node
+    /// - (n-1)th edge
+    /// - nth node
+    pub fn bifoldl_owned<A, FN, FE>(self, mut fn_node: FN, mut fn_edge: FE, initial: A) -> A
+    where
+        FN: FnMut(A, Node) -> A,
+        FE: FnMut(A, Edge) -> A,
+    {
+        match self {
+            Path::Cons(start, edge, rest) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                rest.bifoldl_owned(fn_node, fn_edge, res_edge)
+            }
+            Path::End(start, edge, end) => {
+                let res_start = fn_node(initial, start);
+                let res_edge = fn_edge(res_start, edge);
+                fn_node(res_edge, end)
+            }
+        }
+    }
+
+    /// [`bifoldl`] without the accumulator.
+    pub fn bifor<FN, FE>(&self, mut fn_node: FN, mut fn_edge: FE)
+    where
+        FN: FnMut(&Node),
+        FE: FnMut(&Edge),
+    {
+        self.bifoldl(|(), node| fn_node(node), |(), edge| fn_edge(edge), ())
+    }
+
+    /// [`bifoldl_owned`] without the accumulator.
+    pub fn bifor_owned<FN, FE>(self, mut fn_node: FN, mut fn_edge: FE)
+    where
+        FN: FnMut(Node),
+        FE: FnMut(Edge),
+    {
+        self.bifoldl_owned(|(), node| fn_node(node), |(), edge| fn_edge(edge), ())
+    }
+
+    /// The length of the path. This is effectively the amount of [`Edge`]s, or segments,
+    /// in the path.
+    ///
+    /// NOTE: runs in O(n)
+    pub fn len(&self) -> usize {
+        self.bifoldl(|acc, _| acc, |acc, _| acc + 1, 0)
+    }
+}
+
+impl TryFrom<RawPath> for Path {
+    type Error = RedisGraphError;
+
+    fn try_from(mut path: RawPath) -> Result<Self, Self::Error> {
+        let last_node = path.nodes.pop()
+            .filter(|_| path.nodes.len() == path.edges.len())
+            .ok_or_else(|| RedisGraphError::ServerTypeError("failed to convert RawPath to Path: there must be one more node than there are edges".to_string()))?;
+        let last_edge = path.edges.pop()
+            .ok_or_else(|| RedisGraphError::ServerTypeError("failed to convert RawPath to Path: there must be at least one edge".to_string()))?;
+        let second_to_last_node = path.nodes.pop()
+            .ok_or_else(|| RedisGraphError::ClientTypeError("BUG in redisgraph-rs: while converting RawPath to Path".to_string()))?;
+
+        let mut segment = Path::End(second_to_last_node, last_edge, last_node);
+        for (node, edge) in path.nodes.into_iter().zip(path.edges.into_iter()).rev() {
+            segment = Path::Cons(node, edge, Box::new(segment));
+        }
+
+        Ok(segment)
     }
 }
 

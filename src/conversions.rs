@@ -1,8 +1,8 @@
 use crate::{
     assignments::FromCell,
     client_type_error,
-    RedisGraphError,
-    RedisGraphResult, RedisString, result_set::{Edge, Node, Path, RawPath, Scalar}, ResultSet,
+    result_set::{Edge, Node, Path, RawPath, Scalar},
+    RedisGraphError, RedisGraphResult, RedisString, ResultSet,
 };
 use std::convert::TryInto;
 

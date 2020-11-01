@@ -3,8 +3,8 @@ use serial_test::serial;
 
 use common::*;
 use redisgraph::{
-    RedisString,
     result_set::{Edge, Node, Path, RawPath, Scalar},
+    RedisString,
 };
 
 mod common;
@@ -201,7 +201,6 @@ fn test_path() {
         );
     });
 }
-
 
 #[test]
 #[serial]
